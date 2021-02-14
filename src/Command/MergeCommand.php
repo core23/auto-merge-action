@@ -66,14 +66,16 @@ final class MergeCommand extends Command
 
         $io = new SymfonyStyle($input, $output);
         $io->title(sprintf(
-            'Merge pull requests with "%s" label (ignoring label: %s)',
+            'Scanning "%s" for "%s" label (ignoring label: %s)',
+            $config->repository(),
             $config->label(),
             $config->ignoreLabel()
         ));
 
         $repository   = Repository::fromString($config->repository());
+        $label        = Label::fromString($config->label());
         $pullRequests = $this->pullRequests->search(
-            Query::labeled($repository, Label::fromString($config->label()), Label::fromString($config->ignoreLabel()))
+            Query::labeled($repository, $label, Label::fromString($config->ignoreLabel()))
         );
 
         if ([] === $pullRequests) {
@@ -84,18 +86,13 @@ final class MergeCommand extends Command
 
         foreach ($pullRequests as $pullRequest) {
             if ($pullRequest->updatedWithinTheLast60Seconds()) {
-                if ($io->isVerbose()) {
-                    $io->info('Skip very new PRs to ignore workflow delay');
-                }
-
-                continue;
-            }
-
-            if (true === $pullRequest->isMergeable() && $pullRequest->isCleanBuild()) {
+                $io->write('<fg=yellow>[SKIPPED]</> ');
+            } elseif (true === $pullRequest->isMergeable() && $pullRequest->isCleanBuild()) {
                 if ($config->isDryRun()) {
                     $io->write('<fg=yellow>[READY]</> ');
                 } else {
                     $this->pullRequests->merge($repository, $pullRequest, $config->isSquash());
+                    $this->pullRequests->removeLabel($repository, $pullRequest, $label);
 
                     if ($config->isSquash()) {
                         $io->write('<fg=green>[SQUASHED]</> ');
